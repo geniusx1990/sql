@@ -123,3 +123,62 @@ Configure that role so that the customer can only access their own data
 in the "rental" and "payment" tables. Write a query to make sure this user sees 
 only their own data.
  */
+
+ -- Find a customer with non-empty payment and rental history
+SELECT c.customer_id, c.first_name, c.last_name
+FROM customer c
+JOIN payment p ON c.customer_id = p.customer_id
+JOIN rental r ON c.customer_id = r.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name
+HAVING COUNT(p.payment_id) > 0 AND COUNT(r.rental_id) > 0
+LIMIT 1;
+
+SELECT * FROM customer_info;
+
+/* dvdrental=# select * from customer_info;
+ customer_id | first_name | last_name 
+-------------+------------+-----------
+           2 | PATRICIA   | JOHNSON
+(1 row)
+
+ */
+
+DO
+$$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'client_PATRICIA_JOHNSON') THEN
+        CREATE ROLE client_PATRICIA_JOHNSON WITH LOGIN PASSWORD 'password';
+    ELSE
+        RAISE NOTICE 'Role "client_PATRICIA_JOHNSON" already exists, skipping creation.';
+    END IF;
+END
+$$;
+
+GRANT SELECT ON TABLE rental TO client_PATRICIA_JOHNSON;
+GRANT SELECT ON TABLE payment TO client_PATRICIA_JOHNSON;
+
+ALTER TABLE rental ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS client_rental_policy ON rental;
+
+CREATE POLICY client_rental_policy ON rental
+    FOR SELECT
+    USING (customer_id = 2);
+
+ALTER TABLE payment ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS client_payment_policy ON payment;
+
+CREATE POLICY client_payment_policy ON payment
+    FOR SELECT
+    USING (customer_id = 2);
+
+
+SET ROLE client_PATRICIA_JOHNSON;
+
+-- Test queries to see if only Patricia's data is accessible
+SELECT * FROM rental;
+SELECT * FROM payment;
+
+-- Reset the role back
+RESET ROLE;
